@@ -174,6 +174,21 @@ class QuantConv2d(nn.Conv2d):
         wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
         print('clipping threshold weight alpha: {:2f}'.format(wgt_alpha))
 
+class QuantTrans2d(nn.ConvTranspose2d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1, w_bit=4, power=True):
+        super(QuantTrans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
+        self.layer_type = 'QuantTrans2d'
+        self.bit = w_bit
+        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=power)
+        self.register_parameter('wgt_alpha', Parameter(torch.tensor(3.0)))
+
+    def forward(self, x):
+        weight_q = self.weight_quant(self.weight)
+        return F.conv_transpose2d(x, weight_q, self.bias, self.stride, self.padding, self.output_padding, self.groups, self.dilation)
+
+    def show_params(self):
+        wgt_alpha = round(self.wgt_alpha.data.item(), 3)
+        print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
 
 class QuantAvg(nn.AvgPool2d):
     def __init__(self, kernel_size, stride):
@@ -210,13 +225,28 @@ class QuantReLU(nn.ReLU):
         act_alpha = round(self.act_alpha.data.item(), 3)
         print('clipping threshold activation alpha: {:2f}'.format(act_alpha)) 
 
-    def extra_repr(self) -> str:
-        return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha)
+    def extra_repr(self):
+        return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
 
 class QuantLinear(nn.Linear):
     def __init__(self, in_features, out_features, bias=True):
         super(QuantLinear, self).__init__(in_features, out_features, bias)
         self.layer_type = 'QuantLinear'
+        self.bit = 4
+        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
+        
+    def forward(self, x):
+        weight_q = self.weight_quant(self.weight)
+        return F.linear(x, weight_q, self.bias)
+    
+    def show_params(self):
+        wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
+        print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
+
+class QuantTanh(nn.Tanh):
+    def __init__(self, in_features, out_features, bias=True):
+        super(QuantTanh, self).__init__(in_features, out_features, bias)
+        self.layer_type = 'Quantanh'
         self.bit = 4
         self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
         
@@ -241,13 +271,24 @@ class first_conv(nn.Conv2d):
         return F.conv2d(x, weight_q, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
-class last_fc(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True):
-        super(last_fc, self).__init__(in_features, out_features, bias)
-        self.layer_type = 'LFC'
+class last_trans2d(nn.ConvTranspose2d):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):
+        super(last_trans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
+        self.layer_type = 'last_trans2d'
 
     def forward(self, x):
         max = self.weight.data.max()
         weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
-        weight_q = (weight_q-self.weight).detach()+self.weight
-        return F.linear(x, weight_q, self.bias)
+        weight_q = (weight_q - self.weight).detach() + self.weight
+        return F.conv_transpose2d(x, weight_q, self.bias, self.stride, self.padding, self.output_padding, self.groups, self.dilation)
+
+# class last_fc(nn.Linear):
+#     def __init__(self, in_features, out_features, bias=True):
+#         super(last_fc, self).__init__(in_features, out_features, bias)
+#         self.layer_type = 'LFC'
+
+#     def forward(self, x):
+#         max = self.weight.data.max()
+#         weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
+#         weight_q = (weight_q-self.weight).detach()+self.weight
+#         return F.linear(x, weight_q, self.bias)
