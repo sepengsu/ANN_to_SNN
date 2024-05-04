@@ -281,14 +281,3 @@ class last_trans2d(nn.ConvTranspose2d):
         weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
         weight_q = (weight_q - self.weight).detach() + self.weight
         return F.conv_transpose2d(x, weight_q, self.bias, self.stride, self.padding, self.output_padding, self.groups, self.dilation)
-
-# class last_fc(nn.Linear):
-#     def __init__(self, in_features, out_features, bias=True):
-#         super(last_fc, self).__init__(in_features, out_features, bias)
-#         self.layer_type = 'LFC'
-
-#     def forward(self, x):
-#         max = self.weight.data.max()
-#         weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
-#         weight_q = (weight_q-self.weight).detach()+self.weight
-#         return F.linear(x, weight_q, self.bias)

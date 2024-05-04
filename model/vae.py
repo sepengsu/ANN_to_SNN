@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F 
 from base.quant_layer import QuantConv2d,QuantTrans2d,QuantLinear,QuantReLU, QuantTanh, first_conv, last_trans2d
 from origin.ann_vae import VanillaVAE
-from ..converting.utils import Params
+from converting.utils import Params
 
 class Dummy(nn.Module):
     def __init__(self, block):
@@ -63,4 +63,14 @@ class Quant_VAE(VanillaVAE):
                     nn.BatchNorm2d(**params['batchnorm']),
                     QuantReLU(),
                 ))
+
+        # final_layer 재정의
+        params = Params(self.final_layer).get_last_params()
+        self.final_layer = Dummy(nn.Sequential(
+            last_trans2d(**params['trans2d_1']),
+            nn.BatchNorm2d(**params['batchnorm']),
+            QuantReLU(),
+            last_trans2d(**params['trans2d_2']),
+            QuantTanh(),
+        ))
 

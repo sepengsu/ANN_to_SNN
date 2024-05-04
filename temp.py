@@ -6,6 +6,7 @@ def main():
     print(model.fc_mu)
     print(model.fc_var)
     print(model.decoder)
+    print(model.final_layer)
 
 
 

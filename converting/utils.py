@@ -74,3 +74,26 @@ class Params:
                 raise ValueError(f"Layer {layer} is not supported")
         return layer_para
     
+    def get_last_params(self):
+        # 5개의 seq 가지고 있음, trans2는 2개임, 
+        # 마지막 trans2d, batchnorm, relu, trans2d, tanh임
+        layer_para = {}
+        trans_count = 0
+        for layer in self.sequential:
+            if isinstance(layer, torch.nn.Conv2d):
+                layer_para['conv2d'] = param_conv2d(layer)
+            elif isinstance(layer, torch.nn.ConvTranspose2d):
+                trans_count += 1
+                layer_para[f'trans2d_{trans_count}'] = param_trans2d(layer)
+            elif isinstance(layer, torch.nn.Linear):
+                layer_para['linear'] = param_linear(layer)
+            elif isinstance(layer, torch.nn.BatchNorm2d):
+                layer_para['batchnorm'] = param_batchnorm(layer)
+            elif isinstance(layer, torch.nn.ReLU) or isinstance(layer, torch.nn.LeakyReLU):
+                layer_para['relu'] = {}
+            elif isinstance(layer, torch.nn.Tanh):
+                layer_para['tanh'] = {}
+            else:
+                raise ValueError(f"Layer {layer} is not supported")
+        return layer_para
+    
