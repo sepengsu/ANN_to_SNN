@@ -1,5 +1,4 @@
 torch==1.8.1
-# torch==1.7.1
 torchvision==0.9.1 #--find-links https://example.com/path/to/your/wheel/torchvision-0.9.1+cpu-cp37-cp37m-win_amd64.whl
 #torchvision==0.9.2
 #pycuda
@@ -8,5 +7,5 @@ pyyaml
 tqdm
 matplotlib
 scipy
-#clean-fid
+clean-fid
 pandas

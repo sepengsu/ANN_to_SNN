@@ -243,20 +243,6 @@ class QuantLinear(nn.Linear):
         wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
         print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
 
-class QuantTanh(nn.Tanh):
-    def __init__(self, in_features, out_features, bias=True):
-        super(QuantTanh, self).__init__(in_features, out_features, bias)
-        self.layer_type = 'Quantanh'
-        self.bit = 4
-        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
-        
-    def forward(self, x):
-        weight_q = self.weight_quant(self.weight)
-        return F.linear(x, weight_q, self.bias)
-    
-    def show_params(self):
-        wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
-        print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
 
 # 8-bit quantization for the first and the last layer
 class first_conv(nn.Conv2d):
@@ -271,6 +257,29 @@ class first_conv(nn.Conv2d):
         return F.conv2d(x, weight_q, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
 
+
+class QuantTanh(nn.Tanh):
+    def __init__(self, bit=4, power=True):
+        super(QuantTanh, self).__init__()
+        self.layer_type = 'QuantTanh'
+        self.bit = bit
+        self.power = power
+        self.act_grid = build_power_value(self.bit, additive=True)
+        self.act_alq = act_quantization(self.bit, self.act_grid, power=self.power)
+        self.act_alpha = torch.nn.Parameter(torch.tensor(8.0))
+
+    def forward(self, x):
+        x = super().forward(x)  # Apply the tanh function through superclass
+        x = self.act_alq(x, self.act_alpha)  # Quantize the output of tanh
+        return x
+
+    def show_params(self):
+        act_alpha = round(self.act_alpha.data.item(), 3)
+        print('clipping threshold activation alpha: {:.2f}'.format(act_alpha))
+
+    def extra_repr(self):
+        return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
+    
 class last_trans2d(nn.ConvTranspose2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):
         super(last_trans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)

@@ -1,2 +1,8 @@
 python8/
-__pycache__
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+models/
+data/
+ checkpoint/
