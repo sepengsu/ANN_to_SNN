@@ -229,10 +229,10 @@ class QuantReLU(nn.ReLU):
         return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
 
 class QuantLinear(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self, in_features, out_features, bias=True, w_bit=4):
         super(QuantLinear, self).__init__(in_features, out_features, bias)
         self.layer_type = 'QuantLinear'
-        self.bit = 4
+        self.bit = w_bit
         self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
         
     def forward(self, x):
@@ -259,27 +259,37 @@ class first_conv(nn.Conv2d):
 
 
 class QuantTanh(nn.Tanh):
-    def __init__(self, bit=4, power=True):
+    def __init__(self):
         super(QuantTanh, self).__init__()
         self.layer_type = 'QuantTanh'
-        self.bit = bit
-        self.power = power
+        self.bit = 4
         self.act_grid = build_power_value(self.bit, additive=True)
-        self.act_alq = act_quantization(self.bit, self.act_grid, power=self.power)
-        self.act_alpha = torch.nn.Parameter(torch.tensor(8.0))
+        self.act_alq = act_quantization(self.bit, self.act_grid, power=True)
+        self.act_alpha = torch.nn.Parameter(torch.tensor(1.0))  # Tanh의 출력 범위는 -1에서 1이므로 alpha 초기값을 1로 설정
 
     def forward(self, x):
-        x = super().forward(x)  # Apply the tanh function through superclass
-        x = self.act_alq(x, self.act_alpha)  # Quantize the output of tanh
-        return x
+        x = torch.tanh(x)  
+        return self.act_alq(x, self.act_alpha)
 
     def show_params(self):
         act_alpha = round(self.act_alpha.data.item(), 3)
-        print('clipping threshold activation alpha: {:.2f}'.format(act_alpha))
+        print('clipping threshold activation alpha: {:2f}'.format(act_alpha))
 
     def extra_repr(self):
         return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
-    
+
+class QuantizedFC(nn.Linear):
+    def __init__(self, in_features, out_features, bias=True, bit=8):
+        super(QuantizedFC, self).__init__(in_features, out_features, bias)
+        self.layer_type = 'QuantizedFC'
+        self.bit = bit  # 양자화할 때 사용할 비트 수
+
+    def forward(self, x):
+        max_val = self.weight.data.abs().max()  # 가중치의 절대값 중 최대값
+        scale_factor = (2**self.bit - 1) / max_val  # 스케일링 계수 계산
+        weight_q = self.weight.mul(scale_factor).round().div(scale_factor)  # 가중치를 스케일링 후 반올림하고 다시 스케일 다운
+        return F.linear(x, weight_q, self.bias)  # 양자화된 가중치를 사용하여 선형 변환 수행
+
 class last_trans2d(nn.ConvTranspose2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):
         super(last_trans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)

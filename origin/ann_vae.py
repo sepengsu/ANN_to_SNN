@@ -72,7 +72,6 @@ class VanillaVAE(nn.Module):
         # of the latent Gaussian distribution
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
-
         return [mu, log_var]
 
     def decode(self, z):
@@ -207,6 +206,6 @@ class VanillaVAELarge(VanillaVAE):
                                                output_padding=1),
                             nn.BatchNorm2d(hidden_dims[-1]),
                             nn.LeakyReLU(),
-                            nn.ConvTranspose2d(hidden_dims[-1], out_channels= self.in_channels, # deconvにしてみる
+                            nn.ConvTranspose2d(hidden_dims[-1], out_channels= self.in_channels,
                                       kernel_size= 3, padding= 1),
                             nn.Tanh())

@@ -122,6 +122,7 @@ def calc_inception_score(network, epoch, batch_size=256):
     network = network.eval()
     with torch.no_grad():
         inception_mean, inception_std = inception_score.get_inception_score_ann(network, device=device, batch_size=batch_size, batch_times=10)
+        print(f'Inception Score: {inception_mean} +/- {inception_std}')
         writer.add_scalar('Sample/inception_score_mean', inception_mean, epoch)
         writer.add_scalar('Sample/inception_score_std', inception_std, epoch)
 
@@ -207,7 +208,7 @@ if __name__ == '__main__':
         checkpoint = torch.load(checkpoint_path)
         net.load_state_dict(checkpoint)  
 
-    optimizer = torch.optim.AdamW(net.parameters(), lr=0.001, betas=(0.9, 0.999))
+    optimizer = torch.optim.AdamW(net.parameters(), lr=0.01, betas=(0.9, 0.999))
     best_loss = 1e8
     max_epoch = args.epoch
     for e in range(max_epoch):
@@ -221,7 +222,7 @@ if __name__ == '__main__':
         sample(net, e, batch_size=128)
 
         calc_inception_score(net, e)
-        calc_clean_fid(net, e)
+        # calc_clean_fid(net, e)
         
     print("Training is finished")    
     writer.close()

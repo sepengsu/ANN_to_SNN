@@ -1,0 +1,47 @@
+
+from torch.utils.tensorboard import SummaryWriter
+class MySummaryWriter(SummaryWriter):
+
+    def add_images(self, tag, img_tensor, global_step=None, walltime=None, dataformats='NCHW'):
+        torch._C._log_api_usage_once("tensorboard.logging.add_images")
+        if self._check_caffe2_blob(img_tensor):
+            from caffe2.python import workspace
+            img_tensor = workspace.FetchBlob(img_tensor)
+        self._get_file_writer().add_summary(
+            image(tag, img_tensor, dataformats=dataformats), global_step, walltime)
+
+from tensorboard.compat.proto.summary_pb2 import Summary
+from torch.utils.tensorboard._convert_np import make_np
+from torch.utils.tensorboard.summary import make_image
+from torch.utils.tensorboard._utils import convert_to_HWC, _calc_scale_factor
+import numpy as np
+def image(tag, tensor, rescale=1, dataformats='NCHW'):
+
+    tensor = make_np(tensor)
+    tensor = convert_to_HWC(tensor, dataformats)
+    # Do not assume that user passes in values in [0, 255], use data type to detect
+    scale_factor = _calc_scale_factor(tensor)
+    tensor = tensor.astype(np.float32)
+    tensor = (tensor * scale_factor).astype(np.uint8)
+    image = make_image(tensor, rescale=rescale)
+    return Summary(value=[Summary.Value(tag=tag, image=image)])
+
+def make_image(tensor, rescale=1, rois=None, labels=None):
+    """Convert a numpy representation of an image to Image protobuf"""
+    from PIL import Image
+    height, width, channel = tensor.shape
+    scaled_height = int(height * rescale)
+    scaled_width = int(width * rescale)
+    image = Image.fromarray(tensor)
+    if rois is not None:
+        image = draw_boxes(image, rois, labels=labels)
+    image = image.resize((scaled_width, scaled_height), Image.ANTIALIAS)
+    import io
+    output = io.BytesIO()
+    image.save(output, format='PNG')
+    image_string = output.getvalue()
+    output.close()
+    return Summary.Image(height=height,
+                         width=width,
+                         colorspace=channel,
+                         encoded_image_string=image_string)
