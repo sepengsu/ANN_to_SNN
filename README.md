@@ -1,11 +1,11 @@
 ### project
 참조 라이브러리
-FAST-SNN
 
-ESVAE
+FAST-SNN https://github.com/yangfan-hu/Fast-SNN
 
-# base, 
-### utils,data, metrics는 ESVAE 참조
+ESVAE https://github.com/qgzhan/esvae
+
+### base, utils,data, metrics는 ESVAE 참조
 ### origin은 ESVAE의 ANN_VAE 사용 
 ### train은 입맛에 맞게 수정 완료 
 
