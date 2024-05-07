@@ -1,5 +1,6 @@
 from cleanfid import fid
 import torch
+import numpy as np
 #import autoencoder_fid as autoencoder
 
 def get_clean_fid_score(model, dataset, device, num_gen=5000):

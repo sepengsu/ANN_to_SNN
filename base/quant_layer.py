@@ -175,8 +175,10 @@ class QuantConv2d(nn.Conv2d):
         print('clipping threshold weight alpha: {:2f}'.format(wgt_alpha))
 
 class QuantTrans2d(nn.ConvTranspose2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1, w_bit=4, power=True):
-        super(QuantTrans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1, 
+                 w_bit=4, power=True):
+        super(QuantTrans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
+                                           output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
         self.layer_type = 'QuantTrans2d'
         self.bit = w_bit
         self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=power)
@@ -289,6 +291,17 @@ class QuantizedFC(nn.Linear):
         scale_factor = (2**self.bit - 1) / max_val  # 스케일링 계수 계산
         weight_q = self.weight.mul(scale_factor).round().div(scale_factor)  # 가중치를 스케일링 후 반올림하고 다시 스케일 다운
         return F.linear(x, weight_q, self.bias)  # 양자화된 가중치를 사용하여 선형 변환 수행
+    
+class last_fc(nn.Linear):
+    def __init__(self, in_features, out_features, bias=True):
+        super(last_fc, self).__init__(in_features, out_features, bias)
+        self.layer_type = 'LFC'
+
+    def forward(self, x):
+        max = self.weight.data.max()
+        weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
+        weight_q = (weight_q-self.weight).detach()+self.weight
+        return F.linear(x, weight_q, self.bias)
 
 class last_trans2d(nn.ConvTranspose2d):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):

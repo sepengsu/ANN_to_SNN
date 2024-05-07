@@ -67,11 +67,11 @@ class VanillaVAE(nn.Module):
     def encode(self, input):
         result = self.encoder(input)
         result = torch.flatten(result, start_dim=1)
-
         # Split the result into mu and var components
         # of the latent Gaussian distribution
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
+
         return [mu, log_var]
 
     def decode(self, z):
@@ -206,6 +206,6 @@ class VanillaVAELarge(VanillaVAE):
                                                output_padding=1),
                             nn.BatchNorm2d(hidden_dims[-1]),
                             nn.LeakyReLU(),
-                            nn.ConvTranspose2d(hidden_dims[-1], out_channels= self.in_channels,
+                            nn.ConvTranspose2d(hidden_dims[-1], out_channels= self.in_channels, # deconvにしてみる
                                       kernel_size= 3, padding= 1),
                             nn.Tanh())

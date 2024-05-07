@@ -15,20 +15,24 @@ from utils.datasets import load_dataset_ann
 import metrics.inception_score as inception_score
 import metrics.clean_fid as clean_fid
 # import metrics.autoencoder_fid as autoencoder_fid # 일단 주석처리
-from base.quant_layer import QuantConv2d, QuantLinear, QuantReLU, build_power_value, weight_quantize_fn, act_quantization, QuantTanh
+from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
+from base.quant_layer import QuantTanh, QuantReLU
+from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
 from model.vae import Quant_VAE, S_VAE
 from origin.ann_vae import VanillaVAE
+from base.spiking import unsigned_spikes
 
 
 max_accuracy = 0
 min_loss = 1000
 
 
+
 def quantinize(model, args):
     for m in model.modules():
         #Ouroboros-------determine quantization
         #APoT quantization for weights, uniform quantization for activations
-        if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear):
+        if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear) or isinstance(m, QuantTrans2d):
             #weight quantization, use APoT
             m.weight_quant = weight_quantize_fn(w_bit=args.bit, power=True)
         if isinstance(m, QuantReLU) or isinstance(m, QuantTanh):
@@ -173,7 +177,6 @@ if __name__ == '__main__':
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
         net = Quant_VAE(in_channels, args.latent_dim)
-        # net = VanillaVAE(in_channels, args.latent_dim)
 
     elif args.dataset.lower() == 'fashion':
         train_loader, test_loader = load_dataset_ann.load_fashionmnist(data_path, args.batch_size)

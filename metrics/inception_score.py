@@ -47,7 +47,7 @@ def calc_inception_score(img_generator, device=torch.device("cuda:0"), resize=Tr
     # Load inception model
     inception_model = inception_v3(pretrained=True, transform_input=False).to(device)
     inception_model.eval()
-    up = nn.Upsample(size=(299, 299), mode='bilinear').to(device)
+    up = nn.Upsample(size=(299, 299), mode='bilinear',align_corners=False).to(device) # Upsample to 299x299
     def get_pred(x):
         if resize:
             x = up(x)

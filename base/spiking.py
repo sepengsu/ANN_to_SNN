@@ -100,3 +100,34 @@ class IF(nn.Module):
     
     def extra_repr(self) -> str:
         return 'threshold={:.3f}'.format(self.act_alpha)  
+    
+
+class first_Spiking(nn.Module):
+    def __init__(self, block, T):
+        super(first_Spiking, self).__init__()
+        self.block = block
+        self.T = T
+        self.is_first = True
+        self.idem = False
+        self.sign = True  # 여기서는 sign을 사용하지 않습니다.
+
+    def forward(self, x):
+        if self.idem:
+            return x
+
+        # Prepare charges by expanding the input tensor across the time dimension
+        x = x.unsqueeze(1)  # Add a time dimension
+        x = x.repeat(1, self.T, 1)  # Repeat input across the time dimension
+
+        # Flatten the batch and time dimensions for processing through the block
+        train_shape = [x.shape[0], x.shape[1]]  # Original dimensions of batch and time
+        x = x.flatten(0, 1)  # Flatten batch and time dimensions
+        x = self.block(x)  # Process through the provided block
+        train_shape.extend(x.shape[1:])  # Append the remaining dimensions after processing
+        x = x.reshape(train_shape)  # Reshape to the original batch and new dimensions
+
+        # Here, no spiking or threshold logic is applied, just linear transformation
+        return x
+
+    def extra_repr(self) -> str:
+        return f'T={self.T}, is_first={self.is_first}, idem={self.idem}'

@@ -15,9 +15,12 @@ from utils.datasets import load_dataset_ann
 import metrics.inception_score as inception_score
 import metrics.clean_fid as clean_fid
 # import metrics.autoencoder_fid as autoencoder_fid # 일단 주석처리
-from base.quant_layer import QuantConv2d, QuantLinear, QuantReLU, build_power_value, weight_quantize_fn, act_quantization, QuantTanh
+from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
+from base.quant_layer import QuantTanh, QuantReLU
+from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
 from model.vae import Quant_VAE, S_VAE
 from origin.ann_vae import VanillaVAE
+from base.spiking import unsigned_spikes
 
 
 max_accuracy = 0
@@ -28,7 +31,7 @@ def quantinize(model, args):
     for m in model.modules():
         #Ouroboros-------determine quantization
         #APoT quantization for weights, uniform quantization for activations
-        if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear):
+        if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear) or isinstance(m, QuantTrans2d):
             #weight quantization, use APoT
             m.weight_quant = weight_quantize_fn(w_bit=args.bit, power=True)
         if isinstance(m, QuantReLU) or isinstance(m, QuantTanh):
@@ -38,7 +41,7 @@ def quantinize(model, args):
     return model
 
 
-def rename_keys_for_compatibility(model1_state_dict):
+def rename_keys_for_compatibility(model_state_dict):
     key_map = {
         'fc_mu.block.weight': 'fc_mu.block.0.weight',
         'fc_mu.block.bias': 'fc_mu.block.0.bias',
@@ -46,18 +49,15 @@ def rename_keys_for_compatibility(model1_state_dict):
         'fc_var.block.bias': 'fc_var.block.0.bias',
         'decoder_input.block.weight': 'decoder_input.block.0.weight',
         'decoder_input.block.bias': 'decoder_input.block.0.bias',
-        'final_layer.block.2.act_alpha': 'final_layer.block.2.weight',
-        'final_layer.block.3.weight': 'final_layer.block.2.bias',
-        'final_layer.block.3.bias': 'final_layer.block.3.act_alpha'
     }
     
     new_state_dict = {}
-    for old_key, value in model1_state_dict.items():
+    for old_key, value in model_state_dict.items():
         new_key = key_map.get(old_key, old_key)  # 변환 규칙에 따라 새 키를 찾거나 기존 키를 사용
         new_state_dict[new_key] = value
     return new_state_dict
 
-def test(network, testloader, epoch):
+def test(network, testloader):
     loss_meter = AverageMeter()
     recons_meter = AverageMeter()
     kld_meter = AverageMeter()
@@ -73,43 +73,37 @@ def test(network, testloader, epoch):
             recons_meter.update(losses['Reconstruction_Loss'].detach().cpu().item())
             kld_meter.update(losses['KLD'].detach().cpu().item())
 
-            print(f'Test[{epoch}/{max_epoch}] [{batch_idx}/{len(testloader)}] Loss: {loss_meter.avg}, RECONS: {recons_meter.avg}, KLD: {kld_meter.avg}')
+            print(f'Test [{batch_idx}/{len(testloader)}] Loss: {loss_meter.avg}, RECONS: {recons_meter.avg}, KLD: {kld_meter.avg}')
 
             if batch_idx == len(testloader)-1:
-                os.makedirs(f'checkpoint/{args.name}/imgs/test/', exist_ok=True)
-                torchvision.utils.save_image((real_img+1)/2, f'checkpoint/{args.name}/imgs/test/epoch{epoch}_input.png')
-                torchvision.utils.save_image((recons+1)/2, f'checkpoint/{args.name}/imgs/test/epoch{epoch}_recons.png')
-                writer.add_images('Test/input_img', (real_img+1)/2, epoch)
-                writer.add_images('Test/recons_img', (recons+1)/2, epoch)
+                os.makedirs(f'checkpoint/{args.after_name}/imgs/test/', exist_ok=True)
+                torchvision.utils.save_image((real_img+1)/2, f'checkpoint/{args.after_name}/imgs/test/convert_input.png')
+                torchvision.utils.save_image((recons+1)/2, f'checkpoint/{args.after_name}/imgs/test/convert_recons.png')
+                writer.add_images('Test/input_img', (real_img+1)/2,1)
+                writer.add_images('Test/recons_img', (recons+1)/2,1)
 
-    logging.info(f"Test [{epoch}] Loss: {loss_meter.avg} ReconsLoss: {recons_meter.avg} KLD: {kld_meter.avg}")
-    writer.add_scalar('Test/loss', loss_meter.avg, epoch)
-    writer.add_scalar('Test/recons_loss', recons_meter.avg, epoch)
-    writer.add_scalar('Test/kld', kld_meter.avg, epoch)
-    # writer.add_scalar('Test/mul', count_mul_add.mul_sum / len(testloader), epoch)
-    # writer.add_scalar('Test/add', count_mul_add.add_sum / len(testloader), epoch)
-
-    # for handle in hook_handles:
-    #     handle.remove()
-
+    logging.info(f"Test Loss: {loss_meter.avg} ReconsLoss: {recons_meter.avg} KLD: {kld_meter.avg}")
+    writer.add_scalar('Test/loss', loss_meter.avg)
+    writer.add_scalar('Test/recons_loss', recons_meter.avg)
+    writer.add_scalar('Test/kld', kld_meter.avg)
     return loss_meter.avg
 
-def sample(network, epoch, batch_size=128):
+def sample(network, batch_size=128):
     network = network.eval()
     with torch.no_grad():
         samples = network.sample(batch_size, device)
-        writer.add_images('Sample/sample_img', (samples+1)/2, epoch)
-        os.makedirs(f'checkpoint/{args.name}/imgs/sample/', exist_ok=True)
-        torchvision.utils.save_image((samples+1)/2, f'checkpoint/{args.name}/imgs/sample/epoch{epoch}_sample.png')
+        writer.add_images('Sample/sample_img', (samples+1)/2)
+        os.makedirs(f'checkpoint/{args.after_name}/imgs/sample/', exist_ok=True)
+        torchvision.utils.save_image((samples+1)/2, f'checkpoint/{args.after_name}/imgs/sample/convert_sample.png')
 
-def calc_inception_score(network, epoch, batch_size=256):
+def calc_inception_score(network,batch_size=256):
     network = network.eval()
     with torch.no_grad():
         inception_mean, inception_std = inception_score.get_inception_score_ann(network, device=device, batch_size=batch_size, batch_times=10)
-        writer.add_scalar('Sample/inception_score_mean', inception_mean, epoch)
-        writer.add_scalar('Sample/inception_score_std', inception_std, epoch)
+        writer.add_scalar('Sample/inception_score_mean', inception_mean,1)
+        writer.add_scalar('Sample/inception_score_std', inception_std, 1)
 
-def calc_clean_fid(network, epoch):
+def calc_clean_fid(network):
     network = network.eval()
     with torch.no_grad():
         if args.dataset.lower() == 'mnist': 
@@ -124,7 +118,7 @@ def calc_clean_fid(network, epoch):
             raise ValueError()
 
         fid_score = clean_fid.get_clean_fid_score_ann(network, dataset_name, device, 5000)
-        writer.add_scalar('Sample/FID', fid_score, epoch)
+        writer.add_scalar('Sample/FID', fid_score, 1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -137,6 +131,7 @@ if __name__ == '__main__':
     # quantization arguments
     parser.add_argument('-bit', type=int, default=8)
     parser.add_argument('--quant', action='store_true', default=False)
+    parser.add_argument('--unsigned', action='store_true', default=False)
 
     try:
         args = parser.parse_args()
@@ -154,7 +149,8 @@ if __name__ == '__main__':
     if args.dataset.lower() == 'mnist':     
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
-        net = S_VAE(in_channels, args.latent_dim,T = 2**args.bit - 1)
+        net = S_VAE(in_channels=in_channels, latent_dim=args.latent_dim,T = 2**args.bit - 1)
+        # net = Quant_VAE(in_channels, args.latent_dim)
     elif args.dataset.lower() == 'fashion':
         train_loader, test_loader = load_dataset_ann.load_fashionmnist(data_path, args.batch_size)
         in_channels = 1
@@ -177,9 +173,9 @@ if __name__ == '__main__':
     # quantinize
     if args.quant:
         net = quantinize(net, args)
+    if args.unsigned:
+        unsigned_spikes(net)
     net = net.to(device)
-
-
 
     writer = SummaryWriter(log_dir=f'checkpoint/{args.after_name}/tb')
     logging.basicConfig(filename=f'checkpoint/{args.after_name}/{args.after_name}.log', level=logging.INFO)
@@ -197,12 +193,10 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(net.parameters(), lr=0.001, betas=(0.9, 0.999))
     best_loss = 1e8
     e  = 1
-    test_loss = test(net, test_loader, e)
+    test_loss = test(net, test_loader)
 
-    sample(net, e, batch_size=128)
-
-    calc_inception_score(net, e)
-    calc_clean_fid(net, e)
-    print("Testing finished")
+    sample(net,128)
+    calc_inception_score(net)
+    # calc_clean_fid(net)
 
     writer.close()
