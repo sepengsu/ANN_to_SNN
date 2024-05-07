@@ -15,3 +15,9 @@ ESVAE
 
 2. metrics에서는 inception만 됨 ( FID는 HTTPS 404 error 발생 )
 
+### 05/07 기준
+Quant train은 가능함
+
+SNN converting 가능함 
+
+SNN fine-tuning 진행 중 
