@@ -292,18 +292,7 @@ class QuantizedFC(nn.Linear):
         weight_q = self.weight.mul(scale_factor).round().div(scale_factor)  # 가중치를 스케일링 후 반올림하고 다시 스케일 다운
         return F.linear(x, weight_q, self.bias)  # 양자화된 가중치를 사용하여 선형 변환 수행
     
-class last_fc(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True):
-        super(last_fc, self).__init__(in_features, out_features, bias)
-        self.layer_type = 'LFC'
-
-    def forward(self, x):
-        max = self.weight.data.max()
-        weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
-        weight_q = (weight_q-self.weight).detach()+self.weight
-        return F.linear(x, weight_q, self.bias)
-
-class last_trans2d(nn.ConvTranspose2d):
+class last_trans2d(nn.ConvTranspose2d): # 마지막 레이어의 ConvTranspose2d 레이어
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):
         super(last_trans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
         self.layer_type = 'last_trans2d'

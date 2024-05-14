@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F 
 from base.quant_layer import QuantConv2d,QuantTrans2d,QuantLinear,QuantReLU, QuantTanh, first_conv, last_trans2d, QuantizedFC
-from base.spiking import Spiking, last_Spiking, IF, first_Spiking
+from base.spiking import Spiking, last_Spiking, IF, Repeat
 from origin.ann_vae import VanillaVAE
 from converting.utils import Params
 
@@ -110,7 +110,7 @@ class S_VAE(VanillaVAE):
         
         # decoder input 재정의
         params = Params(self.decoder_input).get_params()
-        self.decoder_input = first_Spiking(nn.Sequential(
+        self.decoder_input = Repeat(nn.Sequential(
             QuantizedFC(**params['linear'])), T)
         
         self.decoder_input.is_first = True
@@ -137,8 +137,6 @@ class S_VAE(VanillaVAE):
     def encode(self, input):
         result = self.encoder(input)
         result = torch.flatten(result, start_dim=2)
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
 
@@ -166,3 +164,5 @@ class S_VAE(VanillaVAE):
                          or isinstance(m, QuantTanh) or isinstance(m, QuantTrans2d):
                 m.show_params()
         
+
+

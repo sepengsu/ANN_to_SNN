@@ -41,7 +41,8 @@ class Spiking(nn.Module):
         for dt in range(self.T):
             membrane = membrane + x[:,dt]
             if dt == 0:
-                spike_train = torch.zeros(membrane.shape[:1] + torch.Size([self.T]) + membrane.shape[1:],device=membrane.device)
+                spike_train = torch.zeros(membrane.shape[:1] + torch.Size([self.T]) + \
+                                          membrane.shape[1:],device=membrane.device)
                 
             spikes = membrane >= threshold
             membrane[spikes] = membrane[spikes] - threshold
@@ -101,33 +102,35 @@ class IF(nn.Module):
     def extra_repr(self) -> str:
         return 'threshold={:.3f}'.format(self.act_alpha)  
     
-
-class first_Spiking(nn.Module):
+class Repeat(nn.Module):
     def __init__(self, block, T):
-        super(first_Spiking, self).__init__()
-        self.block = block
-        self.T = T
-        self.is_first = True
-        self.idem = False
+        super(Repeat, self).__init__()
+        self.block = block  # 반복할 블록
+        self.T = T  # 반복 횟수
+        self.is_first = True  # 처음 실행 여부
+        self.idem = False  # 멱등성 여부
         self.sign = True  # 여기서는 sign을 사용하지 않습니다.
 
     def forward(self, x):
         if self.idem:
-            return x
+            return x  # 멱등이 true인 경우 입력 그대로 반환
 
-        # Prepare charges by expanding the input tensor across the time dimension
-        x = x.unsqueeze(1)  # Add a time dimension
-        x = x.repeat(1, self.T, 1)  # Repeat input across the time dimension
+        # 시간 차원을 추가하여 입력 텐서를 확장
+        x = x.unsqueeze(1)  # 시간 차원 추가
+        x = x.repeat(1, self.T, 1)  # 시간 차원을 따라 입력 반복  ==> repeat 하는 것이 맞는가????
 
-        # Flatten the batch and time dimensions for processing through the block
-        train_shape = [x.shape[0], x.shape[1]]  # Original dimensions of batch and time
-        x = x.flatten(0, 1)  # Flatten batch and time dimensions
-        x = self.block(x)  # Process through the provided block
-        train_shape.extend(x.shape[1:])  # Append the remaining dimensions after processing
-        x = x.reshape(train_shape)  # Reshape to the original batch and new dimensions
+        # 블록 처리를 위해 배치 및 시간 차원을 펼침
+        train_shape = [x.shape[0], x.shape[1]]  # 배치와 시간의 원래 차원
+        x = x.flatten(0, 1)  # 배치와 시간 차원 펼치기
+        x = self.block(x)  # 제공된 블록을 통해 처리
+        train_shape.extend(x.shape[1:])  # 처리 후 남은 차원을 추가
+        x = x.reshape(train_shape)  # 원래 배치와 새로운 차원으로 재구성
 
-        # Here, no spiking or threshold logic is applied, just linear transformation
+        # 여기서는 스파이킹 또는 임계값 로직이 적용되지 않고, 단순 선형 변환만 실행
         return x
 
     def extra_repr(self) -> str:
         return f'T={self.T}, is_first={self.is_first}, idem={self.idem}'
+
+
+
