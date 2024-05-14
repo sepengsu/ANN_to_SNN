@@ -192,23 +192,6 @@ class QuantTrans2d(nn.ConvTranspose2d):
         wgt_alpha = round(self.wgt_alpha.data.item(), 3)
         print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
 
-class QuantAvg(nn.AvgPool2d):
-    def __init__(self, kernel_size, stride):
-        super(QuantAvg, self).__init__(kernel_size, stride)
-        self.layer_type = 'QuantAvg'
-        self.bit = 4
-        self.act_grid = build_power_value(self.bit, additive=True)
-        self.act_alq = act_quantization(self.bit, self.act_grid, power=True)
-        self.act_alpha = torch.nn.Parameter(torch.tensor(8.0))        
-        
-    def forward(self, x):
-        x = F.avg_pool2d(x, self.kernel_size, self.stride)
-        return self.act_alq(x, self.act_alpha)
-    
-    def show_params(self):
-        act_alpha = round(self.act_alpha.data.item(), 3)
-        print('clipping threshold activation alpha: {:2f}'.format(act_alpha)) 
-
 
 class QuantReLU(nn.ReLU):
     def __init__(self, inplace: bool = False):
