@@ -16,7 +16,8 @@ import metrics.inception_score as inception_score
 import metrics.clean_fid as clean_fid
 # import metrics.autoencoder_fid as autoencoder_fid # 일단 주석처리
 from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
-from base.quant_layer import QuantTanh, QuantReLU
+from base.quant_layer import QuantReLU
+from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
 from model.vae import Quant_VAE, S_VAE
 from origin.ann_vae import VanillaVAE

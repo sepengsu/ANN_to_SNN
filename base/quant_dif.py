@@ -2,9 +2,8 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+from base.quant_layer import build_power_value
 
-
-# this function construct an additive pot quantization levels set, with clipping threshold = 1,
 def build_power_value(B=2, additive=True):
     base_a = [0.]
     base_b = [0.]
@@ -13,36 +12,52 @@ def build_power_value(B=2, additive=True):
         if B == 2:
             for i in range(3):
                 base_a.append(2 ** (-i - 1))
+                base_a.append(-2 ** (-i - 1))
         elif B == 4:
             for i in range(3):
                 base_a.append(2 ** (-2 * i - 1))
+                base_a.append(-2 ** (-2 * i - 1))
                 base_b.append(2 ** (-2 * i - 2))
+                base_b.append(-2 ** (-2 * i - 2))
         elif B == 6:
             for i in range(3):
                 base_a.append(2 ** (-3 * i - 1))
+                base_a.append(-2 ** (-3 * i - 1))
                 base_b.append(2 ** (-3 * i - 2))
+                base_b.append(-2 ** (-3 * i - 2))
                 base_c.append(2 ** (-3 * i - 3))
+                base_c.append(-2 ** (-3 * i - 3))
         elif B == 3:
             for i in range(3):
                 if i < 2:
                     base_a.append(2 ** (-i - 1))
+                    base_a.append(-2 ** (-i - 1))
                 else:
                     base_b.append(2 ** (-i - 1))
+                    base_b.append(-2 ** (-i - 1))
                     base_a.append(2 ** (-i - 2))
+                    base_a.append(-2 ** (-i - 2))
         elif B == 5:
             for i in range(3):
                 if i < 2:
                     base_a.append(2 ** (-2 * i - 1))
+                    base_a.append(-2 ** (-2 * i - 1))
                     base_b.append(2 ** (-2 * i - 2))
+                    base_b.append(-2 ** (-2 * i - 2))
                 else:
                     base_c.append(2 ** (-2 * i - 1))
+                    base_c.append(-2 ** (-2 * i - 1))
                     base_a.append(2 ** (-2 * i - 2))
+                    base_a.append(-2 ** (-2 * i - 2))
                     base_b.append(2 ** (-2 * i - 3))
+                    base_b.append(-2 ** (-2 * i - 3))
         else:
             pass
     else:
         for i in range(2 ** B - 1):
             base_a.append(2 ** (-i - 1))
+            base_a.append(-2 ** (-i - 1))
+    
     values = []
     for a in base_a:
         for b in base_b:
@@ -72,7 +87,7 @@ def weight_quantization(b, grids, power=True):
         @staticmethod
         def forward(ctx, input, alpha):
             input.div_(alpha)                          # weights are first divided by alpha
-            input_c = input.clamp(min=0, max=1)       # then clipped to [-1,1]
+            input_c = input.clamp(min=-1, max=1)       # then clipped to [-1,1]
             sign = input_c.sign()
             input_abs = input_c.abs()
             if power:
@@ -114,9 +129,7 @@ class weight_quantize_fn(nn.Module):
             weight_q = self.weight_q(weight, self.wgt_alpha)
         return weight_q
 
-
 def act_quantization(b, grid, power=True):
-
     def uniform_quant(x, b=3):
         xdiv = x.mul(2 ** b - 1)
         xhard = xdiv.round().div(2 ** b - 1)
@@ -133,8 +146,8 @@ def act_quantization(b, grid, power=True):
     class _uq(torch.autograd.Function):
         @staticmethod
         def forward(ctx, input, alpha):
-            input=input.div(alpha)
-            input_c = input.clamp(min=0, max=1)
+            input = input.div(alpha)
+            input_c = input.clamp(min=-1, max=1)
             if power:
                 input_q = power_quant(input_c, grid)
             else:
@@ -147,120 +160,45 @@ def act_quantization(b, grid, power=True):
         def backward(ctx, grad_output):
             grad_input = grad_output.clone()
             input, input_q = ctx.saved_tensors
-            i = (input > 1.).float()
+            i = (input.abs() > 1.).float()
             grad_alpha = (grad_output * (i + (input_q - input) * (1 - i))).sum()
-            grad_input = grad_input*(1-i)
+            grad_input = grad_input * (1 - i)
             return grad_input, grad_alpha
 
     return _uq().apply
 
 
-class QuantConv2d(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
-        super(QuantConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups,
-                                          bias)
-        self.layer_type = 'QuantConv2d'
+
+class QuantTanh(nn.Tanh):
+    def __init__(self):
+        super(QuantTanh, self).__init__()
+        self.layer_type = 'QuantTanh'
         self.bit = 4
-        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
+        self.act_grid = build_power_value(self.bit, additive=True)
+        self.act_alq = act_quantization(self.bit, self.act_grid, power=True)
+        self.act_alpha = torch.nn.Parameter(torch.tensor(1.0))  # Tanh의 출력 범위는 -1에서 1이므로 alpha 초기값을 1로 설정
 
-    def forward(self, x):
-        weight_q = self.weight_quant(self.weight)
-        return F.conv2d(x, weight_q, self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
+    def forward(self, input):
+        return self.act_alq(input, self.act_alpha)
 
-    def show_params(self):
-        wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
-        print('clipping threshold weight alpha: {:2f}'.format(wgt_alpha))
-
-class QuantTrans2d(nn.ConvTranspose2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1, 
-                 w_bit=4, power=True):
-        super(QuantTrans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
-                                           output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
-        self.layer_type = 'QuantTrans2d'
-        self.bit = w_bit
-        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=power)
-        self.register_parameter('wgt_alpha', Parameter(torch.tensor(3.0)))
-
-    def forward(self, x):
-        weight_q = self.weight_quant(self.weight)
-        return F.conv_transpose2d(x, weight_q, self.bias, self.stride, self.padding, self.output_padding, self.groups, self.dilation)
-
-    def show_params(self):
-        wgt_alpha = round(self.wgt_alpha.data.item(), 3)
-        print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
-
-
-class QuantReLU(nn.ReLU):
-    def __init__(self, inplace: bool = False):
-        super(QuantReLU, self).__init__(inplace)
-        self.layer_type = 'QuantReLU'
+class QuantLeakyReLU(nn.LeakyReLU):
+    def __init__(self, negative_slope=0.01, inplace=False):
+        super(QuantLeakyReLU, self).__init__(negative_slope, inplace)
+        self.layer_type = 'QuantLeakyReLU'
         self.bit = 4
         self.act_grid = build_power_value(self.bit, additive=True)
         self.act_alq = act_quantization(self.bit, self.act_grid, power=True)
         self.act_alpha = torch.nn.Parameter(torch.tensor(8.0))
-        
+
     def forward(self, x):
-        x = F.relu(x, inplace=self.inplace)
+        x = F.leaky_relu(x, self.negative_slope, self.inplace)
         return self.act_alq(x, self.act_alpha)
-        
+
     def show_params(self):
         act_alpha = round(self.act_alpha.data.item(), 3)
-        print('clipping threshold activation alpha: {:2f}'.format(act_alpha)) 
+        print('clipping threshold activation alpha: {:2f}'.format(act_alpha))
 
     def extra_repr(self):
         return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
 
-class QuantLinear(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True, w_bit=4):
-        super(QuantLinear, self).__init__(in_features, out_features, bias)
-        self.layer_type = 'QuantLinear'
-        self.bit = w_bit
-        self.weight_quant = weight_quantize_fn(w_bit=self.bit, power=True)
-        
-    def forward(self, x):
-        weight_q = self.weight_quant(self.weight)
-        return F.linear(x, weight_q, self.bias)
-    
-    def show_params(self):
-        wgt_alpha = round(self.weight_quant.wgt_alpha.data.item(), 3)
-        print('clipping threshold weight alpha: {:.2f}'.format(wgt_alpha))
 
-
-# 8-bit quantization for the first and the last layer
-class first_conv(nn.Conv2d):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
-        super(first_conv, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.layer_type = 'FConv2d'
-
-    def forward(self, x):
-        max = self.weight.data.max()
-        weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
-        weight_q = (weight_q-self.weight).detach()+self.weight
-        return F.conv2d(x, weight_q, self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
-    
-
-class QuantizedFC(nn.Linear):
-    def __init__(self, in_features, out_features, bias=True, bit=8):
-        super(QuantizedFC, self).__init__(in_features, out_features, bias)
-        self.layer_type = 'QuantizedFC'
-        self.bit = bit  # 양자화할 때 사용할 비트 수
-
-    def forward(self, x):
-        max_val = self.weight.data.abs().max()  # 가중치의 절대값 중 최대값
-        scale_factor = (2**self.bit - 1) / max_val  # 스케일링 계수 계산
-        weight_q = self.weight.mul(scale_factor).round().div(scale_factor)  # 가중치를 스케일링 후 반올림하고 다시 스케일 다운
-        return F.linear(x, weight_q, self.bias)  # 양자화된 가중치를 사용하여 선형 변환 수행
-    
-class last_trans2d(nn.ConvTranspose2d): # 마지막 레이어의 ConvTranspose2d 레이어
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, output_padding=0, groups=1, bias=False, dilation=1):
-        super(last_trans2d, self).__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, groups=groups, bias=bias, dilation=dilation)
-        self.layer_type = 'last_trans2d'
-
-    def forward(self, x):
-        max = self.weight.data.max()
-        weight_q = self.weight.div(max).mul(127).round().div(127).mul(max)
-        weight_q = (weight_q - self.weight).detach() + self.weight
-        return F.conv_transpose2d(x, weight_q, self.bias, self.stride, self.padding, self.output_padding, self.groups, self.dilation)
-    

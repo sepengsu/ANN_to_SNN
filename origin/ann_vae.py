@@ -87,6 +87,7 @@ class VanillaVAE(nn.Module):
         result = self.decoder(result)
         result = self.final_layer(result)
         return result
+    
 
     
     def reparameterize(self, mu, logvar):

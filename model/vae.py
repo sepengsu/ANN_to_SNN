@@ -2,7 +2,8 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F 
-from base.quant_layer import QuantConv2d,QuantTrans2d,QuantLinear,QuantReLU, QuantTanh, first_conv, last_trans2d, QuantizedFC
+from base.quant_layer import QuantConv2d,QuantTrans2d,QuantLinear,QuantReLU,first_conv, last_trans2d, QuantizedFC
+from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.spiking import Spiking, last_Spiking, IF, Repeat
 from origin.ann_vae import VanillaVAE
 from converting.utils import Params
@@ -54,25 +55,31 @@ class Quant_VAE(VanillaVAE):
             QuantizedFC(**params['linear']),
         ) # decocder input은 8bit로 할지 고민해봐야함
 
+        decoder = []
         # decoder 재정의
         for i in range(len(self.decoder)):
             seq = self.decoder[i]
             params = Params(seq).get_params()
-            self.decoder[i] = Dummy(nn.Sequential(
+            decoder.append(Dummy(nn.Sequential(
                 QuantTrans2d(**params['trans2d']),
                 nn.BatchNorm2d(**params['batchnorm']),
                 QuantReLU(),
-            ))
+            )))
+        
         # final_layer 재정의
         params = Params(self.final_layer).get_last_params()
-        self.final_layer = Dummy(nn.Sequential(
+        decoder.append(Dummy(nn.Sequential(
             QuantTrans2d(**params['trans2d_1']),
             nn.BatchNorm2d(**params['batchnorm']),
-            QuantReLU(inplace=True),
+            QuantReLU(),
+        )))
+        self.decoder = nn.Sequential(*decoder)
+        params = Params(self.final_layer).get_last_params()
+        self.final_layer = Dummy(nn.Sequential(
             last_trans2d(**params['trans2d_2']), # 마지막은 8bit로
             QuantTanh()
         ))
-    
+
     def show_params(self):
         for m in self.modules():
             if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear) or isinstance(m, QuantReLU)\
@@ -115,24 +122,27 @@ class S_VAE(VanillaVAE):
         
         self.decoder_input.is_first = True
         
+        decoder = []
         # decoder 재정의
         for i in range(len(self.decoder)):
             seq = self.decoder[i]
             params = Params(seq).get_params()
-            self.decoder[i] = Spiking(nn.Sequential(
+            decoder.append(Spiking(nn.Sequential(
                 QuantTrans2d(**params['trans2d']),
                 nn.BatchNorm2d(**params['batchnorm']),
-                IF()), T)
-        
+                IF()), T))
+            
         # final_layer 재정의
         params = Params(self.final_layer).get_last_params()
-        
-        self.final_layer = last_Spiking(nn.Sequential(
-            QuantTrans2d(**params['trans2d_1']),
+        decoder.append(Spiking(nn.Sequential(
+            last_trans2d(**params['trans2d_1']), # 마지막은 8bit로
             nn.BatchNorm2d(**params['batchnorm']),
-            IF(),
-            last_trans2d(**params['trans2d_2']),
+            IF()), T))
+        self.decoder = nn.Sequential(*decoder)
+        self.final_layer = last_Spiking(nn.Sequential(
+            last_trans2d(**params['trans2d_2']), # 마지막은 8bit로
             QuantTanh()), T)
+        
         
     def encode(self, input):
         result = self.encoder(input)
