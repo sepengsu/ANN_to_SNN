@@ -18,14 +18,20 @@ class Spiking(nn.Module):
         self.is_first = False
         self.idem = False
         self.sign = True
+        
     def forward(self, x):
         if self.idem:
             return x
         
-        ###initialize membrane to half threshold
-        threshold = self.block[2].act_alpha.data
-        membrane = 0.5 * threshold
-        sum_spikes = 0
+        # 막전위를 임계값의 절반으로 초기화
+        # 이 부분에서 올바른 인덱스로 접근하도록 수정
+        threshold = None
+        for layer in self.block:
+            if hasattr(layer, 'act_alpha'):
+                threshold = layer.act_alpha.data
+                break
+        if threshold is None:
+            raise ValueError("act_alpha가 있는 레이어를 찾을 수 없습니다.")
         
         #prepare charges
         if self.is_first:
@@ -101,7 +107,7 @@ class IF(nn.Module):
     
     def extra_repr(self) -> str:
         return 'threshold={:.3f}'.format(self.act_alpha)  
-    
+
 class Repeat(nn.Module):
     def __init__(self, block, T):
         super(Repeat, self).__init__()

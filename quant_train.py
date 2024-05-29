@@ -19,8 +19,8 @@ from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
 from base.quant_layer import QuantReLU
 from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
-from model.vae import Quant_VAE, S_VAE
-from origin.ann_vae import VanillaVAE
+# from model.vae import Quant_VAE
+from model.vae_final import Quant_VAE
 from base.spiking import unsigned_spikes
 
 

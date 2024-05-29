@@ -20,6 +20,7 @@ from base.quant_layer import QuantReLU
 from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
 from model.vae import Quant_VAE, S_VAE
+from model.vae_v2 import LIF_VAE_v2
 from origin.ann_vae import VanillaVAE
 from base.spiking import unsigned_spikes
 
@@ -123,6 +124,7 @@ def calc_clean_fid(network):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-modelname', type=str, default='s_vae',help='model name (s_vae, lif_vae, lif_vae_v2, vanilla_vae)')
     parser.add_argument('-before_name', type=str,required=True)
     parser.add_argument('-after_name', type=str,required=True)
     parser.add_argument('-dataset', type=str, required=True)
@@ -146,11 +148,12 @@ if __name__ == '__main__':
         device = torch.device(f"cuda:{args.device}")
 
     data_path = "./data"
-
+    modelname = args.modelname.upper() if args.modelname.lower() in ['s_vae', 'lif_vae', 'lif_vae_v2', 'vanilla_vae'] else 'LIF_VAE_v2'
     if args.dataset.lower() == 'mnist':     
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
-        net = S_VAE(in_channels=in_channels, latent_dim=args.latent_dim,T = 2**args.bit - 1)
+        strings = f'net = {modelname}({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
+        exec(strings)
         # net = Quant_VAE(in_channels, args.latent_dim)
     elif args.dataset.lower() == 'fashion':
         train_loader, test_loader = load_dataset_ann.load_fashionmnist(data_path, args.batch_size)

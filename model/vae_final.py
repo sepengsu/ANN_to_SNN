@@ -3,8 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F 
 from base.quant_layer import QuantConv2d,QuantTrans2d,QuantLinear,QuantReLU,first_conv, last_trans2d, QuantizedFC
-from base.quant_dif import QuantTanh, QuantLeakyReLU
-from base.spiking import Spiking, last_Spiking, IF, Repeat
+from base.quant_dif import QuantTanh
+from base.spiking_v2 import Spiking_LIF, last_Spiking
+from base.spiking import IF, last_Spiking
 from origin.ann_vae import VanillaVAE
 from converting.utils import Params
 
@@ -17,8 +18,24 @@ class Dummy(nn.Module):
         if self.idem:
             return x
         return self.block(x)
- 
+
+class Dummy_IF(IF):
+    def __init__(self) -> None:
+        super(Dummy_IF, self).__init__()
+
+    def forward(self, x):
+        return x
+
 class Quant_VAE(VanillaVAE):
+    '''
+    최종본으로 사용하고 있음 주요 특징은 다음과 같다
+    1. encoder, decoder, fc_mu, fc_var, decoder_input, final_layer를 quantized로 변환
+    2. encoder의 첫번째 레이어는 first_conv로 변환
+    3. decoder_input은 Dummy_IF을 추가한 후 dummy로 변환
+    4. decoder는 Dummy로 변환
+    5. final_layer는 quantized로 변환
+    6. 각 레이어의 파라미터를 출력하는 show_params 메소드 추가
+    '''
     def __init__(self, in_channels, latent_dim) -> None:
         super().__init__(in_channels, latent_dim)
 
@@ -51,9 +68,10 @@ class Quant_VAE(VanillaVAE):
 
         # decoder input 재정의
         params = Params(self.decoder_input).get_params()
-        self.decoder_input = Dummy(
-            QuantizedFC(**params['linear'])
-        )
+        self.decoder_input = Dummy(nn.Sequential(
+            QuantizedFC(**params['linear']),
+            Dummy_IF()
+        ))
 
         decoder = []
         # decoder 재정의
@@ -86,23 +104,33 @@ class Quant_VAE(VanillaVAE):
                          or isinstance(m, QuantTanh) or isinstance(m, QuantTrans2d):
                 m.show_params()
 
-
-
-class S_VAE(VanillaVAE):
-    def __init__(self, in_channels, latent_dim,T: int = 3) -> None:
+ 
+class LIF_VAE(VanillaVAE): # 최종 본으로 시영 되고 있음 
+    '''
+    최종본으로 사용하고 있음 주요 특징은 다음과 같다
+    1. encoder, decoder, fc_mu, fc_var, decoder_input, final_layer를 spiking으로 변환
+    2. encoder의 첫번째 레이어는 first_conv로 변환
+    3. decoder_input은 Spiking_LIF로 변환
+    4. decoder는 Spiking_LIF로 변환
+    5. final_layer는 last_Spiking으로 변환
+    6. 각 레이어의 파라미터를 출력하는 show_params 메소드 추가
+    7. Spiking_LIF의 sign을 False로 설정하여 signed spiking을 사용하지 않도록 설정
+    8. Spiking_LIF의 idem을 False로 설정하여 항등함수를 사용하지 않도록 설정
+    '''
+    def __init__(self, in_channels, latent_dim, T: int = 3) -> None:
         super().__init__(in_channels, latent_dim)
 
         # encoder 재정의
         for i in range(len(self.encoder)):
             seq = self.encoder[i]
             params = Params(seq).get_params()
-            if i==0:
-                self.encoder[i] = Spiking(nn.Sequential(
+            if i == 0:
+                self.encoder[i] = Spiking_LIF(nn.Sequential(
                     first_conv(**params['conv2d']),
                     nn.BatchNorm2d(**params['batchnorm']),
                     IF()), T)
             else:
-                self.encoder[i] = Spiking(nn.Sequential(
+                self.encoder[i] = Spiking_LIF(nn.Sequential(
                     QuantConv2d(**params['conv2d']),
                     nn.BatchNorm2d(**params['batchnorm']),
                     IF()), T)
@@ -119,9 +147,8 @@ class S_VAE(VanillaVAE):
         
         # decoder input 재정의
         params = Params(self.decoder_input).get_params()
-        self.decoder_input = Repeat(nn.Sequential(
-            QuantizedFC(**params['linear'])), T)
-        
+        self.decoder_input = Spiking_LIF(nn.Sequential(
+            QuantizedFC(**params['linear']),IF()), T) # IF 추가 및 스파킹 method 추가 
         self.decoder_input.is_first = True
         
         decoder = []
@@ -129,18 +156,19 @@ class S_VAE(VanillaVAE):
         for i in range(len(self.decoder)):
             seq = self.decoder[i]
             params = Params(seq).get_params()
-            decoder.append(Spiking(nn.Sequential(
+            decoder.append(Spiking_LIF(nn.Sequential(
                 QuantTrans2d(**params['trans2d']),
                 nn.BatchNorm2d(**params['batchnorm']),
                 IF()), T))
             
-        # final_layer 재정의
         params = Params(self.final_layer).get_last_params()
-        decoder.append(Spiking(nn.Sequential(
-            QuantConv2d(**params['trans2d_1']), # 마지막은 8bit로
-            nn.BatchNorm2d(**params['batchnorm']),
-            IF()), T))
+        decoder.append(Spiking_LIF(nn.Sequential(
+                QuantTrans2d(**params['trans2d_1']),
+                nn.BatchNorm2d(**params['batchnorm']),
+                IF()), T))
+        
         self.decoder = nn.Sequential(*decoder)
+
         self.final_layer = last_Spiking(nn.Sequential(
             last_trans2d(**params['trans2d_2']), # 마지막은 8bit로
             QuantTanh()), T)
@@ -164,7 +192,7 @@ class S_VAE(VanillaVAE):
 
         result = self.decoder_input(z)
         # 여기서 result.shape = [B x T x D] 이므로 [B x T x D x 2 x 2]로 reshape
-        result = result.view(-1,result.shape[1], self.hidden_dims[-1], 2, 2) # encoder에서 flatten한거 다시 reshape
+        result = result.view(-1, result.shape[1], self.hidden_dims[-1], 2, 2) # encoder에서 flatten한거 다시 reshape
         result = self.decoder(result)
         result = self.final_layer(result)
         return result
@@ -172,9 +200,7 @@ class S_VAE(VanillaVAE):
     
     def show_params(self):
         for m in self.modules():
-            if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear) or isinstance(m, QuantReLU)\
-                         or isinstance(m, QuantTanh) or isinstance(m, QuantTrans2d):
+            if isinstance(m, QuantConv2d) or isinstance(m, QuantLinear) or isinstance(m, QuantReLU) \
+                    or isinstance(m, QuantTanh) or isinstance(m, QuantTrans2d):
                 m.show_params()
-        
-
-
+ 

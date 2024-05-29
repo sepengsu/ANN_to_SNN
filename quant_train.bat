@@ -5,5 +5,5 @@ quant_vae ^
 -batch_size 64 ^
 -latent_dim 128 ^
 -bit 3 ^
---epoch 10 ^
+--epoch 1 ^
 --quant

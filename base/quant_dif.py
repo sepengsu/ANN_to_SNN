@@ -180,6 +180,14 @@ class QuantTanh(nn.Tanh):
 
     def forward(self, input):
         return self.act_alq(input, self.act_alpha)
+    
+    def show_params(self):
+        act_alpha = round(self.act_alpha.data.item(), 3)
+        print('clipping threshold activation alpha: {:2f}'.format(act_alpha)) 
+
+    def extra_repr(self):
+        return 'clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
+
 
 class QuantLeakyReLU(nn.LeakyReLU):
     def __init__(self, negative_slope=0.01, inplace=False):
