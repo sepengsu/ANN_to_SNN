@@ -19,10 +19,8 @@ from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
 from base.quant_layer import QuantReLU
 from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
-from model.vae import Quant_VAE, S_VAE
-from model.vae_v2 import LIF_VAE_v2
-from origin.ann_vae import VanillaVAE
-from base.spiking import unsigned_spikes
+from model import vae_IF,vae_LIF
+from base.spiking_IF import unsigned_spikes
 
 
 max_accuracy = 0
@@ -124,7 +122,7 @@ def calc_clean_fid(network):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-modelname', type=str, default='s_vae',help='model name (s_vae, lif_vae, lif_vae_v2, vanilla_vae)')
+    parser.add_argument('-model', type=str, default='vae_IF', help='The name of model')
     parser.add_argument('-before_name', type=str,required=True)
     parser.add_argument('-after_name', type=str,required=True)
     parser.add_argument('-dataset', type=str, required=True)
@@ -148,32 +146,32 @@ if __name__ == '__main__':
         device = torch.device(f"cuda:{args.device}")
 
     data_path = "./data"
-    modelname = args.modelname.upper() if args.modelname.lower() in ['s_vae', 'lif_vae', 'lif_vae_v2', 'vanilla_vae'] else 'LIF_VAE_v2'
+
+    version = args.model
     if args.dataset.lower() == 'mnist':     
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
-        strings = f'net = {modelname}({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
-        exec(strings)
-        # net = Quant_VAE(in_channels, args.latent_dim)
+        s = f'vae_{version}.{version}_VAE({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
+
     elif args.dataset.lower() == 'fashion':
         train_loader, test_loader = load_dataset_ann.load_fashionmnist(data_path, args.batch_size)
         in_channels = 1
-        net = S_VAE(in_channels, args.latent_dim,T = 2**args.bit - 1)
+        s = f'vae_{version}.{version}_VAE({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
     elif args.dataset.lower() == 'celeba':
         train_loader, test_loader = load_dataset_ann.load_celeba(data_path, args.batch_size)
         in_channels = 3
-        net = S_VAE(in_channels, args.latent_dim,T = 2**args.bit - 1)
+        s = f'vae_{version}.{version}_VAE({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
         raise ValueError("celeba dataset is not supported")
-        # net = ann_vae.VanillaVAELarge(in_channels, args.latent_dim)
+    
     elif args.dataset.lower() == 'cifar10':
         train_loader, test_loader = load_dataset_ann.load_cifar10(data_path, args.batch_size)
         in_channels = 3
-        net = S_VAE(in_channels, args.latent_dim,T = 2**args.bit - 1)
+        s = f'vae_{version}.{version}_VAE({in_channels}, {args.latent_dim},T = 2**{args.bit} - 1)'
     else:
         raise ValueError("invalid dataset")
     
+    net = eval(s)
 
-    
     # quantinize
     if args.quant:
         net = quantinize(net, args)

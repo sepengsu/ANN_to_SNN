@@ -240,6 +240,25 @@ class first_conv(nn.Conv2d):
         return F.conv2d(x, weight_q, self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
     
+class QuantTanh(nn.Tanh):
+    def __init__(self):
+        super(QuantTanh, self).__init__()
+        self.layer_type = 'QuantTanh'
+        self.bit = 4
+        self.act_grid = build_power_value(self.bit, additive=True)
+        self.act_alg = act_quantization(self.bit, self.act_grid, power=True)
+        self.act_alpha = torch.nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, x):
+        x = torch.tanh(x)
+        return self.act_alg(x, self.act_alpha)
+
+    def show_params(self):
+        act_alpha = round(self.act_alpha.data.item(), 3)
+        print('Clipping threshold activation alpha: {:.3f}'.format(act_alpha))
+
+    def extra_repr(self):
+        return 'Clipping threshold activation alpha: {:.3f}'.format(self.act_alpha.item())
 
 class QuantizedFC(nn.Linear):
     def __init__(self, in_features, out_features, bias=True, bit=8):

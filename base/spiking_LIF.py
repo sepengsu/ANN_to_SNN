@@ -42,35 +42,35 @@ class Spiking_LIF(nn.Module):
         
         # charges 통합 (누수 포함)
         for dt in range(self.T):
-            membrane = (1 - 1/self.tau) * membrane + x[:, dt]
+            membrane = (1 - 1/self.tau) * membrane + x[:, dt] # 누수 포함
             if dt == 0:
                 spike_train = torch.zeros(membrane.shape[:1] + torch.Size([self.T]) + membrane.shape[1:], device=membrane.device)
             
-            spikes = membrane >= threshold
-            membrane[spikes] = membrane[spikes] - threshold
-            spikes = spikes.float()
+            spikes = membrane >= threshold # threshold를 넘으면 spike 발생
+            membrane[spikes] = membrane[spikes] - threshold # spike 발생한 부분은 임계값만큼 감소
+            spikes = spikes.float() # spike 발생한 부분은 1로 표시
             sum_spikes = sum_spikes + spikes
             
             # 서명된 스파이크
-            if self.sign:
-                inhibit = membrane <= -1e-3
-                inhibit = inhibit & (sum_spikes > 0)
-                membrane[inhibit] = membrane[inhibit] + threshold
-                inhibit = inhibit.float()
-                sum_spikes = sum_spikes - inhibit
+            if self.sign: # 서명된 스파이크 사용
+                inhibit = membrane <= -1e-3 # 임계값의 음수 부분을 inhibit으로 설정
+                inhibit = inhibit & (sum_spikes > 0) # inhibit이 발생하고 spike가 있을 때
+                membrane[inhibit] = membrane[inhibit] + threshold # inhibit이 발생한 부분은 임계값만큼 증가
+                inhibit = inhibit.float() # inhibit이 발생한 부분은 1로 표시
+                sum_spikes = sum_spikes - inhibit # inhibit이 발생한 부분은 spike를 제거
             else:
                 inhibit = 0
 
-            spike_train[:, dt] = spikes - inhibit
+            spike_train[:, dt] = spikes - inhibit # spike와 inhibit을 합침
         
         spike_train = spike_train * threshold
         return spike_train
 
 
 
-class last_Spiking(nn.Module):
+class last_Spiking_LIF(nn.Module):
     def __init__(self, block, T, tau=20.0):
-        super(last_Spiking, self).__init__()
+        super(last_Spiking_LIF, self).__init__()
         self.block = block
         self.T = T
         self.tau = tau  # Leaky 통합을 위한 시간 상수
@@ -108,7 +108,8 @@ class last_Spiking(nn.Module):
         for dt in range(self.T):
             membrane = (1 - 1/self.tau) * membrane + x[:, dt]
             if dt == 0:
-                spike_train = torch.zeros(membrane.shape[:1] + torch.Size([self.T]) + membrane.shape[1:], device=membrane.device)
+                spike_train = torch.zeros(membrane.shape[:1] + torch.Size([self.T]) + membrane.shape[1:],\
+                                           device=membrane.device)
             
             spikes = membrane >= threshold
             membrane[spikes] = membrane[spikes] - threshold

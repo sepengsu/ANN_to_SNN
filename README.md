@@ -15,9 +15,7 @@ ESVAE https://github.com/qgzhan/esvae
 
 2. metrics에서는 inception만 됨 ( FID는 HTTPS 404 error 발생 )
 
-### 05/07 기준
-Quant train은 가능함
-
-SNN converting 가능함 
-
-SNN fine-tuning 진행 중 
+### 07/14 업데이트 
+#### Spiking_IF 은 IF 뉴런과 Last_Spiking에 IF 뉴런 삽입한 형태
+#### Spiking_LIF 은 LIF 뉴런과 Last_Spiking에 LIF 뉴런 삽입한 형태
+#### Quant_train --> Snn_converting 하기 

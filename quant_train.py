@@ -19,9 +19,8 @@ from base.quant_layer import QuantConv2d,QuantizedFC, QuantTrans2d, QuantLinear
 from base.quant_layer import QuantReLU
 from base.quant_dif import QuantTanh, QuantLeakyReLU
 from base.quant_layer import build_power_value, weight_quantize_fn, act_quantization
-# from model.vae import Quant_VAE
-from model.vae_final import Quant_VAE
-from base.spiking import unsigned_spikes
+from model import vae_IF,vae_LIF
+from base.spiking_IF import unsigned_spikes
 
 
 max_accuracy = 0
@@ -107,12 +106,6 @@ def test(network, testloader, epoch):
     writer.add_scalar('Test/loss', loss_meter.avg, epoch)
     writer.add_scalar('Test/recons_loss', recons_meter.avg, epoch)
     writer.add_scalar('Test/kld', kld_meter.avg, epoch)
-    # writer.add_scalar('Test/mul', count_mul_add.mul_sum / len(testloader), epoch)
-    # writer.add_scalar('Test/add', count_mul_add.add_sum / len(testloader), epoch)
-
-    # for handle in hook_handles:
-    #     handle.remove()
-
     return loss_meter.avg
 
 def sample(network, epoch, batch_size=128):
@@ -151,6 +144,7 @@ def calc_clean_fid(network, epoch):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('name', type=str)
+    parser.add_argument('-model', type=str, default='vae_IF', help='The name of model')
     parser.add_argument('-dataset', type=str, required=True)
     parser.add_argument('-batch_size', type=int, default=250)
     parser.add_argument('-latent_dim', type=int, default=128)
@@ -174,15 +168,18 @@ if __name__ == '__main__':
 
     data_path = "./data"
 
+    # model name 찾기
+    modeltype = args.model
+
     if args.dataset.lower() == 'mnist':     
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
-        net = Quant_VAE(in_channels, args.latent_dim)
+        s = f"{modeltype}.Quant_VAE({in_channels}, {args.latent_dim})"
 
     elif args.dataset.lower() == 'fashion':
         train_loader, test_loader = load_dataset_ann.load_fashionmnist(data_path, args.batch_size)
         in_channels = 1
-        net = Quant_VAE(in_channels, args.latent_dim)
+        s = f"{modeltype}.Quant_VAE({in_channels}, {args.latent_dim})"
     elif args.dataset.lower() == 'celeba':
         train_loader, test_loader = load_dataset_ann.load_celeba(data_path, args.batch_size)
         in_channels = 3
@@ -191,16 +188,19 @@ if __name__ == '__main__':
     elif args.dataset.lower() == 'cifar10':
         train_loader, test_loader = load_dataset_ann.load_cifar10(data_path, args.batch_size)
         in_channels = 3
-        net = Quant_VAE(in_channels, args.latent_dim)
+        s = f"{modeltype}.Quant_VAE({in_channels}, {args.latent_dim})"
     else:
         raise ValueError("invalid dataset")
-    
+    # 모델 불러오기
+    net = eval(s)
     # quantinize
     if args.quant:
         net = quantinize(net, args)
     net = net.to(device)
 
     os.makedirs(f'checkpoint/{args.name}', exist_ok=True)
+    print(f"Model: {s}, Dataset: {args.dataset}, Batch Size: {args.batch_size}, Latent Dim: {args.latent_dim}")
+    print("Training is started")
 
     writer = SummaryWriter(log_dir=f'checkpoint/{args.name}/tb')
     logging.basicConfig(filename=f'checkpoint/{args.name}/{args.name}.log', level=logging.INFO)
