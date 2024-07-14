@@ -122,9 +122,9 @@ def calc_clean_fid(network):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-model', type=str, default='vae_IF', help='The name of model')
-    parser.add_argument('-before_name', type=str,required=True)
-    parser.add_argument('-after_name', type=str,required=True)
+    parser.add_argument('-model', type=str, default='vae_IF', help='Type of model')
+    parser.add_argument('-before_name', type=str,required=True, help='양자화 학습한 모델 폴더명')
+    parser.add_argument('-after_name', type=str,required=True, help='SNN 변환 모델 폴더명')
     parser.add_argument('-dataset', type=str, required=True)
     parser.add_argument('-batch_size', type=int, default=250)
     parser.add_argument('-latent_dim', type=int, default=128)
@@ -147,7 +147,8 @@ if __name__ == '__main__':
 
     data_path = "./data"
 
-    version = args.model
+    version = args.model.spl
+
     if args.dataset.lower() == 'mnist':     
         train_loader, test_loader = load_dataset_ann.load_mnist(data_path, args.batch_size)
         in_channels = 1 
