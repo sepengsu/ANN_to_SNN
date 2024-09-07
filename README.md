@@ -19,3 +19,8 @@ ESVAE https://github.com/qgzhan/esvae
 #### Spiking_IF 은 IF 뉴런과 Last_Spiking에 IF 뉴런 삽입한 형태
 #### Spiking_LIF 은 LIF 뉴런과 Last_Spiking에 LIF 뉴런 삽입한 형태
 #### Quant_train --> Snn_converting 하기 
+
+
+### 07/26 업데이트
+1. pip install ptflops==0.7.2.2 https://github.com/sovrasov/flops-counter.pytorch 
+2. pip install syops https://github.com/iCGY96/syops-counter 

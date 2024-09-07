@@ -94,8 +94,8 @@ def load_cifar10(data_path,batch_size):
     return trainloader, testloader
 
 def load_MIAD_metal_welding(data_path, batch_size):
-    train_path = os.path.join(data_path, "train/")
-    test_path = os.path.join(data_path, "test/")
+    train_path = os.path.join(data_path, "MIAD/train/")
+    test_path = os.path.join(data_path, "MIAD/test/")
     SetRange = transforms.Lambda(normalize)
     transform = transforms.Compose([
         transforms.Resize((32,32)),
