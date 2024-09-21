@@ -108,27 +108,24 @@ class VanillaVAE(nn.Module):
         return  self.decode(z), mu, log_var
 
     def loss_function(self,
-                      recons_img,
-                      input_img,
-                      mu, log_var, kld_weight) -> dict:
+                  recons_img,
+                  input_img,
+                  mu, log_var, kld_weight) -> dict:
         """
-        Computes the VAE loss function.
-        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
-        :param args:
-        :param kwargs:
-        :return:
+        VAE 손실 함수 계산. 재구성 손실과 KLD 손실을 더하여 최종 손실을 계산.
         """
 
-        recons_loss =F.mse_loss(recons_img, input_img)
+        # 재구성 손실: MSE 사용 (-1에서 1 사이 값에 적합)
+        recons_loss = F.mse_loss(recons_img, input_img)
 
-        
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
+        # KLD 손실 계산 (잠재 공간에서 분포 조정)
+        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
+
+        # 전체 손실: 재구성 손실 + KLD 손실 (가중치 적용)
         loss = recons_loss + kld_weight * kld_loss
-        """
-        kld_loss = -0.5 * torch.mean(1 + log_var - mu ** 2 - log_var.exp())
-        loss = recons_loss + kld_loss
-        """
-        return {'loss': loss, 'Reconstruction_Loss':recons_loss, 'KLD':kld_loss}
+
+        return {'loss': loss, 'Reconstruction_Loss': recons_loss, 'KLD': kld_loss}
+
 
     def sample(self,
                num_samples:int,

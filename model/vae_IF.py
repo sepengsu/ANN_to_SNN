@@ -105,7 +105,7 @@ class IF_VAE(VanillaVAE): # 최종 본으로 시영 되고 있음
     2. QuantReLU를 사용하지 않고 LeakyReLU를 사용
     3. encoder의 첫번째 레이어는 first_conv로 변환
     4. decoder_input은 Spiking_IF로 변환
-    5. decoder는 Spiking_LIF로 변환
+    5. decoder는 Spiking_IF로 변환
     '''
     def __init__(self, in_channels, latent_dim, T: int = 3) -> None:
         super().__init__(in_channels, latent_dim)
@@ -194,4 +194,5 @@ class IF_VAE(VanillaVAE): # 최종 본으로 시영 되고 있음
                     or isinstance(m, QuantTanh) or isinstance(m, QuantTrans2d):
                 m.show_params()
  
+
  
